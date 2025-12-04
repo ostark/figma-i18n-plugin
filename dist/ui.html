@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 12px;
+      color: #333;
+      padding: 12px;
+      background: #fff;
+    }
+
+    h2 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #333;
+    }
+
+    .section {
+      margin-bottom: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #e5e5e5;
+    }
+
+    .section:last-child {
+      border-bottom: none;
+    }
+
+    label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 4px;
+      color: #666;
+    }
+
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    input[type="text"]:focus, input[type="password"]:focus {
+      outline: none;
+      border-color: #18a0fb;
+    }
+
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button.primary {
+      background: #18a0fb;
+      color: white;
+    }
+
+    button.primary:hover {
+      background: #0d8de5;
+    }
+
+    button.primary:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    button.secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+
+    button.secondary:hover {
+      background: #e0e0e0;
+    }
+
+    .status {
+      padding: 8px 12px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      font-size: 11px;
+    }
+
+    .status.info {
+      background: #e8f4fd;
+      color: #1a73e8;
+    }
+
+    .status.success {
+      background: #e6f4ea;
+      color: #1e8e3e;
+    }
+
+    .status.error {
+      background: #fce8e6;
+      color: #d93025;
+    }
+
+    .text-list {
+      max-height: 250px;
+      overflow-y: auto;
+      border: 1px solid #e5e5e5;
+      border-radius: 4px;
+    }
+
+    .text-item {
+      padding: 10px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .text-item:last-child {
+      border-bottom: none;
+    }
+
+    .text-item:hover {
+      background: #fafafa;
+    }
+
+    .text-content {
+      font-size: 12px;
+      color: #333;
+      margin-bottom: 6px;
+      word-break: break-word;
+    }
+
+    .key-input {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .key-input input {
+      flex: 1;
+      margin-bottom: 0;
+      font-family: monospace;
+      font-size: 11px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #999;
+    }
+
+    .empty-state svg {
+      margin-bottom: 12px;
+      opacity: 0.5;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .settings-toggle {
+      font-size: 11px;
+      color: #666;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+
+    .settings-toggle:hover {
+      color: #18a0fb;
+    }
+
+    .settings-panel {
+      display: none;
+      background: #f9f9f9;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+    }
+
+    .settings-panel.visible {
+      display: block;
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+
+    .loading {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #fff;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="section">
+    <div class="settings-toggle" onclick="toggleSettings()">⚙️ GitHub Settings</div>
+    <div id="settings-panel" class="settings-panel">
+      <label>Personal Access Token</label>
+      <input type="password" id="github-token" placeholder="ghp_xxxxxxxxxxxx" />
+
+      <label>Repository (owner/repo)</label>
+      <input type="text" id="github-repo" placeholder="myorg/translations" />
+
+      <label>Branch</label>
+      <input type="text" id="github-branch" placeholder="main" value="main" />
+
+      <label>File Path</label>
+      <input type="text" id="file-path" placeholder="translations/en.yaml" value="translations/en.yaml" />
+
+      <button class="secondary" onclick="saveSettings()">Save Settings</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Selected Text</h2>
+    <div id="status" class="status info">Select elements in Figma to extract text</div>
+
+    <div id="text-list" class="text-list">
+      <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M4 6h16M4 12h16M4 18h10"/>
+        </svg>
+        <div>No text elements selected</div>
+        <div style="margin-top: 4px; font-size: 11px;">Select frames or text layers in Figma</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="btn-row">
+      <button class="primary" id="push-btn" onclick="pushToGitHub()" disabled>
+        Push to GitHub
+      </button>
+      <button class="secondary" onclick="refreshSelection()">
+        Refresh
+      </button>
+    </div>
+  </div>
+
+  <script>
+    let textNodes = [];
+    let settings = {
+      token: '',
+      repo: '',
+      branch: 'main',
+      filePath: 'translations/en.yaml'
+    };
+
+    // Load saved settings
+    function loadSettings() {
+      const saved = localStorage.getItem('figma-i18n-settings');
+      if (saved) {
+        settings = { ...settings, ...JSON.parse(saved) };
+        document.getElementById('github-token').value = settings.token;
+        document.getElementById('github-repo').value = settings.repo;
+        document.getElementById('github-branch').value = settings.branch;
+        document.getElementById('file-path').value = settings.filePath;
+      }
+    }
+
+    function saveSettings() {
+      settings.token = document.getElementById('github-token').value;
+      settings.repo = document.getElementById('github-repo').value;
+      settings.branch = document.getElementById('github-branch').value;
+      settings.filePath = document.getElementById('file-path').value;
+      localStorage.setItem('figma-i18n-settings', JSON.stringify(settings));
+      setStatus('Settings saved!', 'success');
+    }
+
+    function toggleSettings() {
+      document.getElementById('settings-panel').classList.toggle('visible');
+    }
+
+    function setStatus(message, type = 'info') {
+      const status = document.getElementById('status');
+      status.textContent = message;
+      status.className = 'status ' + type;
+    }
+
+    function renderTextList() {
+      const container = document.getElementById('text-list');
+      const pushBtn = document.getElementById('push-btn');
+
+      if (textNodes.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M4 6h16M4 12h16M4 18h10"/>
+            </svg>
+            <div>No text elements selected</div>
+            <div style="margin-top: 4px; font-size: 11px;">Select frames or text layers in Figma</div>
+          </div>
+        `;
+        pushBtn.disabled = true;
+        return;
+      }
+
+      container.innerHTML = textNodes.map((node, i) => `
+        <div class="text-item" data-id="${node.id}">
+          <div class="text-content">"${escapeHtml(node.text)}"</div>
+          <div class="key-input">
+            <input type="text"
+                   id="key-${i}"
+                   value="${escapeHtml(node.suggestedKey)}"
+                   placeholder="translation.key"
+                   onchange="updateKey(${i}, this.value)" />
+          </div>
+        </div>
+      `).join('');
+
+      pushBtn.disabled = false;
+      setStatus(`${textNodes.length} text element(s) found`, 'info');
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function updateKey(index, value) {
+      textNodes[index].key = value;
+    }
+
+    function refreshSelection() {
+      parent.postMessage({ pluginMessage: { type: 'get-selection' } }, '*');
+    }
+
+    async function pushToGitHub() {
+      // Validate settings
+      if (!settings.token || !settings.repo) {
+        setStatus('Please configure GitHub settings first', 'error');
+        toggleSettings();
+        return;
+      }
+
+      // Collect translations
+      const translations = {};
+      textNodes.forEach((node, i) => {
+        const keyInput = document.getElementById('key-' + i);
+        const key = keyInput ? keyInput.value : node.suggestedKey;
+        if (key) {
+          translations[key] = node.text;
+        }
+      });
+
+      if (Object.keys(translations).length === 0) {
+        setStatus('No translations to push', 'error');
+        return;
+      }
+
+      const pushBtn = document.getElementById('push-btn');
+      pushBtn.disabled = true;
+      pushBtn.innerHTML = '<span class="loading"></span> Pushing...';
+      setStatus('Connecting to GitHub...', 'info');
+
+      try {
+        // Fetch existing file (if any)
+        const [owner, repo] = settings.repo.split('/');
+        const apiBase = 'https://api.github.com';
+        const filePath = settings.filePath;
+
+        let existingContent = '';
+        let sha = null;
+
+        try {
+          const getRes = await fetch(
+            `${apiBase}/repos/${owner}/${repo}/contents/${filePath}?ref=${settings.branch}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${settings.token}`,
+                'Accept': 'application/vnd.github.v3+json'
+              }
+            }
+          );
+
+          if (getRes.ok) {
+            const data = await getRes.json();
+            existingContent = atob(data.content);
+            sha = data.sha;
+          }
+        } catch (e) {
+          // File doesn't exist yet, that's fine
+        }
+
+        setStatus('Merging translations...', 'info');
+
+        // Parse existing YAML and merge
+        const existingTranslations = parseYaml(existingContent);
+        const merged = { ...existingTranslations, ...translations };
+        const newContent = toYaml(merged);
+
+        setStatus('Pushing to GitHub...', 'info');
+
+        // Push to GitHub
+        const putRes = await fetch(
+          `${apiBase}/repos/${owner}/${repo}/contents/${filePath}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${settings.token}`,
+              'Accept': 'application/vnd.github.v3+json',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              message: `Update translations from Figma (${Object.keys(translations).length} keys)`,
+              content: btoa(unescape(encodeURIComponent(newContent))),
+              branch: settings.branch,
+              ...(sha ? { sha } : {})
+            })
+          }
+        );
+
+        if (!putRes.ok) {
+          const err = await putRes.json();
+          throw new Error(err.message || 'Failed to push');
+        }
+
+        setStatus(`✓ Pushed ${Object.keys(translations).length} translation(s) to GitHub!`, 'success');
+        parent.postMessage({ pluginMessage: { type: 'notify', message: 'Translations pushed to GitHub!' } }, '*');
+
+      } catch (error) {
+        setStatus('Error: ' + error.message, 'error');
+      } finally {
+        pushBtn.disabled = false;
+        pushBtn.innerHTML = 'Push to GitHub';
+      }
+    }
+
+    // Simple YAML parser (flat keys only)
+    function parseYaml(yaml) {
+      const result = {};
+      if (!yaml) return result;
+
+      const lines = yaml.split('\n');
+      for (const line of lines) {
+        const match = line.match(/^([^:#]+):\s*["']?(.*)["']?\s*$/);
+        if (match) {
+          let key = match[1].trim();
+          let value = match[2].trim();
+          // Remove surrounding quotes
+          if ((value.startsWith('"') && value.endsWith('"')) ||
+              (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.slice(1, -1);
+          }
+          result[key] = value;
+        }
+      }
+      return result;
+    }
+
+    // Simple YAML generator (flat keys)
+    function toYaml(obj) {
+      const lines = [];
+      const sortedKeys = Object.keys(obj).sort();
+      for (const key of sortedKeys) {
+        const value = obj[key];
+        // Quote values that need it
+        const needsQuotes = /[:#{}\[\],&*?|<>=!%@`]/.test(value) ||
+                           value.includes('\n') ||
+                           value.startsWith(' ') ||
+                           value.endsWith(' ');
+        const quoted = needsQuotes ? `"${value.replace(/"/g, '\\"')}"` : value;
+        lines.push(`${key}: ${quoted}`);
+      }
+      return lines.join('\n') + '\n';
+    }
+
+    // Handle messages from plugin
+    window.onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      if (!msg) return;
+
+      if (msg.type === 'selection-result' || msg.type === 'selection-changed') {
+        textNodes = msg.nodes || [];
+        renderTextList();
+      }
+    };
+
+    // Initialize
+    loadSettings();
+  </script>
+</body>
+</html>

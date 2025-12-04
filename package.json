@@ -1,0 +1,20 @@
+{
+  "name": "figma-i18n-plugin",
+  "version": "1.0.0",
+  "description": "Figma plugin to extract text and push translations to GitHub",
+  "scripts": {
+    "build": "npm run build:main && npm run build:ui",
+    "build:main": "esbuild src/main.ts --bundle --outfile=dist/main.js --target=es2020",
+    "build:ui": "cp src/ui.html dist/ui.html",
+    "watch": "npm run build && chokidar 'src/**/*' -c 'npm run build'",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["figma", "plugin", "i18n", "translations", "github"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.121.0",
+    "esbuild": "^0.27.1",
+    "typescript": "^5.9.3"
+  }
+}
