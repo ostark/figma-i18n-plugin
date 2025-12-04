@@ -6,7 +6,7 @@
   "ui": "dist/ui.html",
   "capabilities": [],
   "enableProposedApi": false,
-  "editorType": ["figma"],
+  "editorType": ["figma", "dev"],
   "networkAccess": {
     "allowedDomains": ["https://api.github.com"]
   }
