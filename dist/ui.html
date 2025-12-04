@@ -40,16 +40,17 @@
       color: #666;
     }
 
-    input[type="text"], input[type="password"] {
+    input[type="text"], input[type="password"], textarea {
       width: 100%;
       padding: 8px;
       border: 1px solid #ddd;
       border-radius: 4px;
       font-size: 12px;
       margin-bottom: 8px;
+      font-family: inherit;
     }
 
-    input[type="text"]:focus, input[type="password"]:focus {
+    input[type="text"]:focus, input[type="password"]:focus, textarea:focus {
       outline: none;
       border-color: #18a0fb;
     }
@@ -110,14 +111,14 @@
     }
 
     .text-list {
-      max-height: 250px;
+      max-height: 350px;
       overflow-y: auto;
       border: 1px solid #e5e5e5;
       border-radius: 4px;
     }
 
     .text-item {
-      padding: 10px;
+      padding: 12px;
       border-bottom: 1px solid #f0f0f0;
     }
 
@@ -129,24 +130,46 @@
       background: #fafafa;
     }
 
-    .text-content {
-      font-size: 12px;
-      color: #333;
-      margin-bottom: 6px;
-      word-break: break-word;
-    }
-
-    .key-input {
+    .key-row {
       display: flex;
-      gap: 4px;
+      gap: 8px;
       align-items: center;
+      margin-bottom: 8px;
     }
 
-    .key-input input {
+    .key-row label {
+      margin: 0;
+      min-width: 30px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .key-row input {
       flex: 1;
-      margin-bottom: 0;
+      margin: 0;
       font-family: monospace;
       font-size: 11px;
+    }
+
+    .translations-grid {
+      display: grid;
+      grid-template-columns: 40px 1fr;
+      gap: 6px;
+      align-items: start;
+    }
+
+    .translations-grid label {
+      margin: 0;
+      padding-top: 8px;
+      font-size: 11px;
+      color: #666;
+      text-transform: uppercase;
+    }
+
+    .translations-grid textarea {
+      margin: 0;
+      min-height: 32px;
+      resize: vertical;
     }
 
     .empty-state {
@@ -189,13 +212,6 @@
       display: block;
     }
 
-    .checkbox-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 4px;
-    }
-
     .loading {
       display: inline-block;
       width: 12px;
@@ -208,6 +224,19 @@
 
     @keyframes spin {
       to { transform: rotate(360deg); }
+    }
+
+    .lang-header {
+      display: grid;
+      grid-template-columns: 40px 1fr;
+      gap: 6px;
+      padding: 8px 12px;
+      background: #f5f5f5;
+      border-bottom: 1px solid #e5e5e5;
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      color: #666;
     }
   </style>
 </head>
@@ -224,15 +253,18 @@
       <label>Branch</label>
       <input type="text" id="github-branch" placeholder="main" value="main" />
 
-      <label>File Path</label>
-      <input type="text" id="file-path" placeholder="translations/en.yaml" value="translations/en.yaml" />
+      <label>Translations folder</label>
+      <input type="text" id="translations-folder" placeholder="translations" value="translations" />
+
+      <label>Languages (comma-separated)</label>
+      <input type="text" id="languages" placeholder="en,de,fr" value="en,de,fr" />
 
       <button class="secondary" onclick="saveSettings()">Save Settings</button>
     </div>
   </div>
 
   <div class="section">
-    <h2>Selected Text</h2>
+    <h2>Translations</h2>
     <div id="status" class="status info">Select elements in Figma to extract text</div>
 
     <div id="text-list" class="text-list">
@@ -259,11 +291,13 @@
 
   <script>
     let textNodes = [];
+    let languages = ['en', 'de', 'fr'];
     let settings = {
       token: '',
       repo: '',
       branch: 'main',
-      filePath: 'translations/en.yaml'
+      translationsFolder: 'translations',
+      languages: 'en,de,fr'
     };
 
     // Load saved settings
@@ -274,17 +308,22 @@
         document.getElementById('github-token').value = settings.token;
         document.getElementById('github-repo').value = settings.repo;
         document.getElementById('github-branch').value = settings.branch;
-        document.getElementById('file-path').value = settings.filePath;
+        document.getElementById('translations-folder').value = settings.translationsFolder;
+        document.getElementById('languages').value = settings.languages;
       }
+      languages = settings.languages.split(',').map(l => l.trim()).filter(l => l);
     }
 
     function saveSettings() {
       settings.token = document.getElementById('github-token').value;
       settings.repo = document.getElementById('github-repo').value;
       settings.branch = document.getElementById('github-branch').value;
-      settings.filePath = document.getElementById('file-path').value;
+      settings.translationsFolder = document.getElementById('translations-folder').value;
+      settings.languages = document.getElementById('languages').value;
+      languages = settings.languages.split(',').map(l => l.trim()).filter(l => l);
       localStorage.setItem('figma-i18n-settings', JSON.stringify(settings));
       setStatus('Settings saved!', 'success');
+      renderTextList(); // Re-render with new languages
     }
 
     function toggleSettings() {
@@ -315,19 +354,40 @@
         return;
       }
 
-      container.innerHTML = textNodes.map((node, i) => `
+      // Build header
+      let html = `<div class="lang-header">
+        <span>Key</span>
+        <span style="display: grid; grid-template-columns: repeat(${languages.length}, 1fr); gap: 6px;">
+          ${languages.map(l => `<span>${l.toUpperCase()}</span>`).join('')}
+        </span>
+      </div>`;
+
+      // Build rows
+      html += textNodes.map((node, i) => `
         <div class="text-item" data-id="${node.id}">
-          <div class="text-content">"${escapeHtml(node.text)}"</div>
-          <div class="key-input">
+          <div class="key-row">
+            <label>Key</label>
             <input type="text"
                    id="key-${i}"
                    value="${escapeHtml(node.suggestedKey)}"
-                   placeholder="translation.key"
-                   onchange="updateKey(${i}, this.value)" />
+                   placeholder="translation.key" />
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(${languages.length}, 1fr); gap: 6px;">
+            ${languages.map((lang, langIdx) => `
+              <div>
+                <label style="font-size: 10px; color: #999; margin-bottom: 2px; display: block;">${lang.toUpperCase()}</label>
+                <textarea
+                  id="trans-${i}-${lang}"
+                  rows="2"
+                  placeholder="${lang === languages[0] ? escapeHtml(node.text) : 'Translation...'}"
+                >${lang === languages[0] ? escapeHtml(node.text) : ''}</textarea>
+              </div>
+            `).join('')}
           </div>
         </div>
       `).join('');
 
+      container.innerHTML = html;
       pushBtn.disabled = false;
       setStatus(`${textNodes.length} text element(s) found`, 'info');
     }
@@ -338,10 +398,6 @@
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
-    }
-
-    function updateKey(index, value) {
-      textNodes[index].key = value;
     }
 
     function refreshSelection() {
@@ -356,17 +412,30 @@
         return;
       }
 
-      // Collect translations
-      const translations = {};
+      // Collect translations per language
+      const translationsByLang = {};
+      languages.forEach(lang => {
+        translationsByLang[lang] = {};
+      });
+
       textNodes.forEach((node, i) => {
         const keyInput = document.getElementById('key-' + i);
-        const key = keyInput ? keyInput.value : node.suggestedKey;
+        const key = keyInput ? keyInput.value.trim() : node.suggestedKey;
+
         if (key) {
-          translations[key] = node.text;
+          languages.forEach(lang => {
+            const textarea = document.getElementById(`trans-${i}-${lang}`);
+            const value = textarea ? textarea.value.trim() : '';
+            if (value) {
+              translationsByLang[lang][key] = value;
+            }
+          });
         }
       });
 
-      if (Object.keys(translations).length === 0) {
+      // Check if we have any translations
+      const totalKeys = Object.values(translationsByLang).reduce((sum, obj) => sum + Object.keys(obj).length, 0);
+      if (totalKeys === 0) {
         setStatus('No translations to push', 'error');
         return;
       }
@@ -374,71 +443,75 @@
       const pushBtn = document.getElementById('push-btn');
       pushBtn.disabled = true;
       pushBtn.innerHTML = '<span class="loading"></span> Pushing...';
-      setStatus('Connecting to GitHub...', 'info');
 
       try {
-        // Fetch existing file (if any)
         const [owner, repo] = settings.repo.split('/');
         const apiBase = 'https://api.github.com';
-        const filePath = settings.filePath;
+        const folder = settings.translationsFolder;
 
-        let existingContent = '';
-        let sha = null;
+        // Push each language file
+        for (const lang of languages) {
+          const translations = translationsByLang[lang];
+          if (Object.keys(translations).length === 0) continue;
 
-        try {
-          const getRes = await fetch(
-            `${apiBase}/repos/${owner}/${repo}/contents/${filePath}?ref=${settings.branch}`,
+          const filePath = `${folder}/${lang}.yaml`;
+          setStatus(`Pushing ${lang}.yaml...`, 'info');
+
+          // Fetch existing file
+          let existingContent = '';
+          let sha = null;
+
+          try {
+            const getRes = await fetch(
+              `${apiBase}/repos/${owner}/${repo}/contents/${filePath}?ref=${settings.branch}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${settings.token}`,
+                  'Accept': 'application/vnd.github.v3+json'
+                }
+              }
+            );
+
+            if (getRes.ok) {
+              const data = await getRes.json();
+              existingContent = atob(data.content);
+              sha = data.sha;
+            }
+          } catch (e) {
+            // File doesn't exist yet
+          }
+
+          // Parse and merge
+          const existingTranslations = parseYaml(existingContent);
+          const merged = { ...existingTranslations, ...translations };
+          const newContent = toYaml(merged);
+
+          // Push
+          const putRes = await fetch(
+            `${apiBase}/repos/${owner}/${repo}/contents/${filePath}`,
             {
+              method: 'PUT',
               headers: {
                 'Authorization': `Bearer ${settings.token}`,
-                'Accept': 'application/vnd.github.v3+json'
-              }
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                message: `Update ${lang} translations from Figma (${Object.keys(translations).length} keys)`,
+                content: btoa(unescape(encodeURIComponent(newContent))),
+                branch: settings.branch,
+                ...(sha ? { sha } : {})
+              })
             }
           );
 
-          if (getRes.ok) {
-            const data = await getRes.json();
-            existingContent = atob(data.content);
-            sha = data.sha;
+          if (!putRes.ok) {
+            const err = await putRes.json();
+            throw new Error(`${lang}: ${err.message || 'Failed to push'}`);
           }
-        } catch (e) {
-          // File doesn't exist yet, that's fine
         }
 
-        setStatus('Merging translations...', 'info');
-
-        // Parse existing YAML and merge
-        const existingTranslations = parseYaml(existingContent);
-        const merged = { ...existingTranslations, ...translations };
-        const newContent = toYaml(merged);
-
-        setStatus('Pushing to GitHub...', 'info');
-
-        // Push to GitHub
-        const putRes = await fetch(
-          `${apiBase}/repos/${owner}/${repo}/contents/${filePath}`,
-          {
-            method: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${settings.token}`,
-              'Accept': 'application/vnd.github.v3+json',
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              message: `Update translations from Figma (${Object.keys(translations).length} keys)`,
-              content: btoa(unescape(encodeURIComponent(newContent))),
-              branch: settings.branch,
-              ...(sha ? { sha } : {})
-            })
-          }
-        );
-
-        if (!putRes.ok) {
-          const err = await putRes.json();
-          throw new Error(err.message || 'Failed to push');
-        }
-
-        setStatus(`✓ Pushed ${Object.keys(translations).length} translation(s) to GitHub!`, 'success');
+        setStatus(`✓ Pushed translations to GitHub!`, 'success');
         parent.postMessage({ pluginMessage: { type: 'notify', message: 'Translations pushed to GitHub!' } }, '*');
 
       } catch (error) {
