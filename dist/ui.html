@@ -88,6 +88,11 @@
       background: #e0e0e0;
     }
 
+    button.small {
+      padding: 4px 8px;
+      font-size: 11px;
+    }
+
     .status {
       padding: 8px 12px;
       border-radius: 4px;
@@ -151,27 +156,6 @@
       font-size: 11px;
     }
 
-    .translations-grid {
-      display: grid;
-      grid-template-columns: 40px 1fr;
-      gap: 6px;
-      align-items: start;
-    }
-
-    .translations-grid label {
-      margin: 0;
-      padding-top: 8px;
-      font-size: 11px;
-      color: #666;
-      text-transform: uppercase;
-    }
-
-    .translations-grid textarea {
-      margin: 0;
-      min-height: 32px;
-      resize: vertical;
-    }
-
     .empty-state {
       text-align: center;
       padding: 40px 20px;
@@ -222,6 +206,11 @@
       animation: spin 0.8s linear infinite;
     }
 
+    .loading-dark {
+      border-color: #ccc;
+      border-top-color: transparent;
+    }
+
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
@@ -237,6 +226,95 @@
       font-size: 11px;
       text-transform: uppercase;
       color: #666;
+    }
+
+    /* Search dropdown styles */
+    .key-input-wrapper {
+      position: relative;
+      flex: 1;
+    }
+
+    .key-input-wrapper input {
+      width: 100%;
+    }
+
+    .search-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid #ddd;
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      display: none;
+    }
+
+    .search-dropdown.visible {
+      display: block;
+    }
+
+    .search-result {
+      padding: 8px 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .search-result:last-child {
+      border-bottom: none;
+    }
+
+    .search-result:hover {
+      background: #f5f9ff;
+    }
+
+    .search-result-key {
+      font-family: monospace;
+      font-size: 11px;
+      color: #18a0fb;
+      margin-bottom: 2px;
+    }
+
+    .search-result-preview {
+      font-size: 11px;
+      color: #666;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .search-result-lang {
+      display: inline-block;
+      background: #eee;
+      padding: 1px 4px;
+      border-radius: 2px;
+      font-size: 9px;
+      margin-right: 4px;
+      text-transform: uppercase;
+    }
+
+    .search-result-match {
+      background: #fff3cd;
+    }
+
+    .fetch-keys-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .keys-status {
+      font-size: 11px;
+      color: #666;
+    }
+
+    .keys-status.loaded {
+      color: #1e8e3e;
     }
   </style>
 </head>
@@ -254,10 +332,13 @@
       <input type="text" id="github-branch" placeholder="main" value="main" />
 
       <label>Translations folder</label>
-      <input type="text" id="translations-folder" placeholder="translations" value="translations" />
+      <input type="text" id="translations-folder" placeholder="src" value="src" />
 
-      <label>Languages (comma-separated)</label>
-      <input type="text" id="languages" placeholder="en,de,fr" value="en,de,fr" />
+      <label>Filename</label>
+      <input type="text" id="translations-filename" placeholder="translations.yaml" value="translations.yaml" />
+
+      <label>Locales (comma-separated)</label>
+      <input type="text" id="languages" placeholder="en_US,de_DE,fr_FR" value="en_US,de_DE,fr_FR" />
 
       <button class="secondary" onclick="saveSettings()">Save Settings</button>
     </div>
@@ -265,7 +346,17 @@
 
   <div class="section">
     <h2>Translations</h2>
+
+    <div class="fetch-keys-row">
+      <button class="secondary small" id="fetch-keys-btn" onclick="fetchExistingKeys()">
+        Load existing keys
+      </button>
+      <span id="keys-status" class="keys-status">No keys loaded</span>
+    </div>
+
     <div id="status" class="status info">Select elements in Figma to extract text</div>
+
+    <div id="debug-panel" style="display:none; background:#1e1e1e; color:#0f0; font-family:monospace; font-size:10px; padding:8px; border-radius:4px; margin-bottom:12px; max-height:150px; overflow-y:auto; white-space:pre-wrap;"></div>
 
     <div id="text-list" class="text-list">
       <div class="empty-state">
@@ -291,26 +382,29 @@
 
   <script>
     let textNodes = [];
-    let languages = ['en', 'de', 'fr'];
+    let languages = ['en_US', 'de_DE', 'fr_FR'];
     let settings = {
       token: '',
       repo: '',
       branch: 'main',
-      translationsFolder: 'translations',
-      languages: 'en,de,fr'
+      translationsFolder: 'src',
+      translationsFilename: 'translations.yaml',
+      languages: 'en_US,de_DE,fr_FR'
     };
 
-    // Load saved settings
-    function loadSettings() {
-      const saved = localStorage.getItem('figma-i18n-settings');
-      if (saved) {
-        settings = { ...settings, ...JSON.parse(saved) };
-        document.getElementById('github-token').value = settings.token;
-        document.getElementById('github-repo').value = settings.repo;
-        document.getElementById('github-branch').value = settings.branch;
-        document.getElementById('translations-folder').value = settings.translationsFolder;
-        document.getElementById('languages').value = settings.languages;
-      }
+    // Store all existing translations from GitHub
+    // Structure: { key: { en: "value", de: "value", fr: "value" } }
+    let existingKeys = {};
+    let keysLoaded = false;
+
+    // Apply settings to UI
+    function applySettingsToUI() {
+      document.getElementById('github-token').value = settings.token || '';
+      document.getElementById('github-repo').value = settings.repo || '';
+      document.getElementById('github-branch').value = settings.branch || 'main';
+      document.getElementById('translations-folder').value = settings.translationsFolder || 'src';
+      document.getElementById('translations-filename').value = settings.translationsFilename || 'translations.yaml';
+      document.getElementById('languages').value = settings.languages || 'en_US,de_DE,fr_FR';
       languages = settings.languages.split(',').map(l => l.trim()).filter(l => l);
     }
 
@@ -319,11 +413,19 @@
       settings.repo = document.getElementById('github-repo').value;
       settings.branch = document.getElementById('github-branch').value;
       settings.translationsFolder = document.getElementById('translations-folder').value;
+      settings.translationsFilename = document.getElementById('translations-filename').value;
       settings.languages = document.getElementById('languages').value;
       languages = settings.languages.split(',').map(l => l.trim()).filter(l => l);
-      localStorage.setItem('figma-i18n-settings', JSON.stringify(settings));
+
+      // Save via Figma's clientStorage (through main.ts)
+      parent.postMessage({ pluginMessage: { type: 'save-settings', settings: settings } }, '*');
+
       setStatus('Settings saved!', 'success');
-      renderTextList(); // Re-render with new languages
+      // Reset loaded keys when settings change
+      existingKeys = {};
+      keysLoaded = false;
+      updateKeysStatus();
+      renderTextList();
     }
 
     function toggleSettings() {
@@ -334,6 +436,209 @@
       const status = document.getElementById('status');
       status.textContent = message;
       status.className = 'status ' + type;
+    }
+
+    function addDebug(message) {
+      const panel = document.getElementById('debug-panel');
+      panel.style.display = 'block';
+      panel.textContent += message + '\n';
+      panel.scrollTop = panel.scrollHeight;
+    }
+
+    function clearDebug() {
+      const panel = document.getElementById('debug-panel');
+      panel.textContent = '';
+      panel.style.display = 'none';
+    }
+
+    function updateKeysStatus() {
+      const statusEl = document.getElementById('keys-status');
+      const keyCount = Object.keys(existingKeys).length;
+      if (keysLoaded && keyCount > 0) {
+        statusEl.textContent = `${keyCount} keys loaded`;
+        statusEl.className = 'keys-status loaded';
+      } else if (keysLoaded) {
+        statusEl.textContent = 'No existing keys found';
+        statusEl.className = 'keys-status';
+      } else {
+        statusEl.textContent = 'No keys loaded';
+        statusEl.className = 'keys-status';
+      }
+    }
+
+    async function fetchExistingKeys() {
+      if (!settings.token || !settings.repo) {
+        setStatus('Please configure GitHub settings first', 'error');
+        toggleSettings();
+        return;
+      }
+
+      const btn = document.getElementById('fetch-keys-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loading loading-dark"></span> Loading...';
+      clearDebug();
+
+      try {
+        const [owner, repo] = settings.repo.split('/');
+        const apiBase = 'https://api.github.com';
+        const folder = settings.translationsFolder;
+
+        addDebug(`Settings:`);
+        addDebug(`  Repo: ${owner}/${repo}`);
+        addDebug(`  Branch: ${settings.branch}`);
+        addDebug(`  Folder: ${folder}`);
+        addDebug(`  Languages: ${languages.join(', ')}`);
+
+        existingKeys = {};
+
+        // Fetch each language file
+        // Path: {folder}/{locale}/{filename} e.g. locales/src/de_DE/translations.yaml
+        const filename = settings.translationsFilename || 'translations.yaml';
+        addDebug(`  Filename: ${filename}`);
+
+        for (const lang of languages) {
+          const filePath = `${folder}/${lang}/${filename}`;
+          setStatus(`Loading ${filePath}...`, 'info');
+          console.log('Fetching:', filePath);
+
+          try {
+            const url = `${apiBase}/repos/${owner}/${repo}/contents/${filePath}?ref=${settings.branch}`;
+            addDebug(`Fetching: ${url}`);
+
+            const res = await fetch(url, {
+              headers: {
+                'Authorization': `Bearer ${settings.token}`,
+                'Accept': 'application/vnd.github.v3+json'
+              }
+            });
+
+            addDebug(`Response: ${res.status} ${res.statusText}`);
+
+            if (res.ok) {
+              const data = await res.json();
+              const content = atob(data.content);
+              const translations = parseYaml(content);
+              addDebug(`Loaded ${Object.keys(translations).length} keys from ${lang}`);
+
+              // Merge into existingKeys
+              for (const [key, value] of Object.entries(translations)) {
+                if (!existingKeys[key]) {
+                  existingKeys[key] = {};
+                }
+                existingKeys[key][lang] = value;
+              }
+            } else if (res.status === 404) {
+              addDebug(`File not found: ${filePath}`);
+            } else {
+              const errData = await res.json().catch(() => ({}));
+              addDebug(`ERROR: ${res.status} - ${errData.message || res.statusText}`);
+            }
+          } catch (e) {
+            addDebug(`NETWORK ERROR: ${e.message}`);
+          }
+        }
+
+        keysLoaded = true;
+        updateKeysStatus();
+        setStatus(`Loaded ${Object.keys(existingKeys).length} existing keys`, 'success');
+        renderTextList(); // Re-render to enable search
+
+      } catch (error) {
+        setStatus('Error loading keys: ' + error.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Load existing keys';
+      }
+    }
+
+    function searchKeys(query, nodeIndex) {
+      if (!query || query.length < 1 || !keysLoaded) {
+        hideDropdown(nodeIndex);
+        return;
+      }
+
+      const dropdown = document.getElementById(`dropdown-${nodeIndex}`);
+      if (!dropdown) return;
+
+      const lowerQuery = query.toLowerCase();
+      const results = [];
+
+      // Search through all keys and their values
+      for (const [key, translations] of Object.entries(existingKeys)) {
+        let matchedIn = [];
+
+        // Check if key matches
+        if (key.toLowerCase().includes(lowerQuery)) {
+          matchedIn.push('key');
+        }
+
+        // Check if any translation value matches
+        for (const [lang, value] of Object.entries(translations)) {
+          if (value.toLowerCase().includes(lowerQuery)) {
+            matchedIn.push(lang);
+          }
+        }
+
+        if (matchedIn.length > 0) {
+          results.push({ key, translations, matchedIn });
+        }
+      }
+
+      // Limit results
+      const limitedResults = results.slice(0, 10);
+
+      if (limitedResults.length === 0) {
+        dropdown.innerHTML = '<div class="search-result" style="color: #999; cursor: default;">No matching keys found</div>';
+      } else {
+        dropdown.innerHTML = limitedResults.map(r => {
+          // Build preview showing all languages
+          const previews = languages.map(lang => {
+            const val = r.translations[lang] || '';
+            const isMatch = r.matchedIn.includes(lang);
+            const truncated = val.length > 25 ? val.slice(0, 25) + '...' : val;
+            return `<span class="search-result-lang ${isMatch ? 'search-result-match' : ''}">${lang}</span>${escapeHtml(truncated)}`;
+          }).join(' ');
+
+          return `
+            <div class="search-result" onclick="selectKey(${nodeIndex}, '${escapeHtml(r.key)}')">
+              <div class="search-result-key ${r.matchedIn.includes('key') ? 'search-result-match' : ''}">${escapeHtml(r.key)}</div>
+              <div class="search-result-preview">${previews}</div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      dropdown.classList.add('visible');
+    }
+
+    function selectKey(nodeIndex, key) {
+      // Set the key input
+      const keyInput = document.getElementById(`key-${nodeIndex}`);
+      if (keyInput) {
+        keyInput.value = key;
+      }
+
+      // Fill in the translations
+      const translations = existingKeys[key] || {};
+      languages.forEach(lang => {
+        const textarea = document.getElementById(`trans-${nodeIndex}-${lang}`);
+        if (textarea && translations[lang]) {
+          textarea.value = translations[lang];
+        }
+      });
+
+      hideDropdown(nodeIndex);
+    }
+
+    function hideDropdown(nodeIndex) {
+      const dropdown = document.getElementById(`dropdown-${nodeIndex}`);
+      if (dropdown) {
+        dropdown.classList.remove('visible');
+      }
+    }
+
+    function hideAllDropdowns() {
+      document.querySelectorAll('.search-dropdown').forEach(d => d.classList.remove('visible'));
     }
 
     function renderTextList() {
@@ -354,23 +659,21 @@
         return;
       }
 
-      // Build header
-      let html = `<div class="lang-header">
-        <span>Key</span>
-        <span style="display: grid; grid-template-columns: repeat(${languages.length}, 1fr); gap: 6px;">
-          ${languages.map(l => `<span>${l.toUpperCase()}</span>`).join('')}
-        </span>
-      </div>`;
-
       // Build rows
-      html += textNodes.map((node, i) => `
+      let html = textNodes.map((node, i) => `
         <div class="text-item" data-id="${node.id}">
           <div class="key-row">
             <label>Key</label>
-            <input type="text"
-                   id="key-${i}"
-                   value="${escapeHtml(node.suggestedKey)}"
-                   placeholder="translation.key" />
+            <div class="key-input-wrapper">
+              <input type="text"
+                     id="key-${i}"
+                     value="${escapeHtml(node.suggestedKey)}"
+                     placeholder="${keysLoaded ? 'Type to search existing keys...' : 'translation.key'}"
+                     oninput="searchKeys(this.value, ${i})"
+                     onfocus="searchKeys(this.value, ${i})"
+                     autocomplete="off" />
+              <div id="dropdown-${i}" class="search-dropdown"></div>
+            </div>
           </div>
           <div style="display: grid; grid-template-columns: repeat(${languages.length}, 1fr); gap: 6px;">
             ${languages.map((lang, langIdx) => `
@@ -389,7 +692,7 @@
 
       container.innerHTML = html;
       pushBtn.disabled = false;
-      setStatus(`${textNodes.length} text element(s) found`, 'info');
+      setStatus(`${textNodes.length} text element(s) found${keysLoaded ? ' - type in key field to search' : ''}`, 'info');
     }
 
     function escapeHtml(str) {
@@ -397,7 +700,8 @@
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     function refreshSelection() {
@@ -448,14 +752,16 @@
         const [owner, repo] = settings.repo.split('/');
         const apiBase = 'https://api.github.com';
         const folder = settings.translationsFolder;
+        const filename = settings.translationsFilename || 'translations.yaml';
 
         // Push each language file
+        // Path: {folder}/{locale}/{filename} e.g. locales/src/de_DE/translations.yaml
         for (const lang of languages) {
           const translations = translationsByLang[lang];
           if (Object.keys(translations).length === 0) continue;
 
-          const filePath = `${folder}/${lang}.yaml`;
-          setStatus(`Pushing ${lang}.yaml...`, 'info');
+          const filePath = `${folder}/${lang}/${filename}`;
+          setStatus(`Pushing ${lang}/${filename}...`, 'info');
 
           // Fetch existing file
           let existingContent = '';
@@ -510,6 +816,23 @@
             throw new Error(`${lang}: ${err.message || 'Failed to push'}`);
           }
         }
+
+        // Update local cache with new keys
+        textNodes.forEach((node, i) => {
+          const keyInput = document.getElementById('key-' + i);
+          const key = keyInput ? keyInput.value.trim() : '';
+          if (key) {
+            if (!existingKeys[key]) existingKeys[key] = {};
+            languages.forEach(lang => {
+              const textarea = document.getElementById(`trans-${i}-${lang}`);
+              const value = textarea ? textarea.value.trim() : '';
+              if (value) {
+                existingKeys[key][lang] = value;
+              }
+            });
+          }
+        });
+        updateKeysStatus();
 
         setStatus(`✓ Pushed translations to GitHub!`, 'success');
         parent.postMessage({ pluginMessage: { type: 'notify', message: 'Translations pushed to GitHub!' } }, '*');
@@ -570,10 +893,30 @@
         textNodes = msg.nodes || [];
         renderTextList();
       }
+
+      if (msg.type === 'settings-loaded' && msg.settings) {
+        settings = { ...settings, ...msg.settings };
+        applySettingsToUI();
+      }
+
+      if (msg.type === 'settings-saved') {
+        if (msg.success) {
+          setStatus('Settings saved!', 'success');
+        } else {
+          setStatus('Failed to save settings', 'error');
+        }
+      }
     };
 
-    // Initialize
-    loadSettings();
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.key-input-wrapper')) {
+        hideAllDropdowns();
+      }
+    });
+
+    // Initialize - apply defaults, settings will be loaded from main.ts
+    applySettingsToUI();
   </script>
 </body>
 </html>

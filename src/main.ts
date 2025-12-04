@@ -13,6 +13,17 @@ interface PluginMessage {
   [key: string]: unknown;
 }
 
+interface Settings {
+  token: string;
+  repo: string;
+  branch: string;
+  translationsFolder: string;
+  translationsFilename: string;
+  languages: string;
+}
+
+const SETTINGS_KEY = "i18n-github-settings";
+
 // Show the UI
 figma.showUI(__html__, { width: 450, height: 600 });
 
@@ -67,8 +78,24 @@ function generateSuggestedKey(layerName: string, text: string): string {
   return key || "text";
 }
 
+// Load settings from clientStorage and send to UI
+async function loadAndSendSettings() {
+  try {
+    const settings = await figma.clientStorage.getAsync(SETTINGS_KEY);
+    figma.ui.postMessage({
+      type: "settings-loaded",
+      settings: settings || null,
+    });
+  } catch (e) {
+    figma.ui.postMessage({
+      type: "settings-loaded",
+      settings: null,
+    });
+  }
+}
+
 // Handle messages from UI
-figma.ui.onmessage = (msg: PluginMessage) => {
+figma.ui.onmessage = async (msg: PluginMessage) => {
   if (msg.type === "get-selection") {
     const textNodes = findTextNodes(figma.currentPage.selection);
     figma.ui.postMessage({
@@ -76,6 +103,19 @@ figma.ui.onmessage = (msg: PluginMessage) => {
       nodes: textNodes,
       count: textNodes.length,
     });
+  }
+
+  if (msg.type === "save-settings") {
+    try {
+      await figma.clientStorage.setAsync(SETTINGS_KEY, msg.settings as Settings);
+      figma.ui.postMessage({ type: "settings-saved", success: true });
+    } catch (e) {
+      figma.ui.postMessage({ type: "settings-saved", success: false });
+    }
+  }
+
+  if (msg.type === "load-settings") {
+    await loadAndSendSettings();
   }
 
   if (msg.type === "notify") {
@@ -97,10 +137,13 @@ figma.on("selectionchange", () => {
   });
 });
 
-// Initial selection on load
+// Initial load: send selection and settings
 const initialNodes = findTextNodes(figma.currentPage.selection);
 figma.ui.postMessage({
   type: "selection-result",
   nodes: initialNodes,
   count: initialNodes.length,
 });
+
+// Load and send saved settings
+loadAndSendSettings();

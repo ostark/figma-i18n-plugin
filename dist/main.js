@@ -1,6 +1,7 @@
 "use strict";
 (() => {
   // src/main.ts
+  var SETTINGS_KEY = "i18n-github-settings";
   figma.showUI(__html__, { width: 450, height: 600 });
   function findTextNodes(nodes) {
     const results = [];
@@ -34,7 +35,21 @@
     const key = text.toLowerCase().replace(/[^a-z0-9\s]/gi, "").trim().replace(/\s+/g, "_").slice(0, 30);
     return key || "text";
   }
-  figma.ui.onmessage = (msg) => {
+  async function loadAndSendSettings() {
+    try {
+      const settings = await figma.clientStorage.getAsync(SETTINGS_KEY);
+      figma.ui.postMessage({
+        type: "settings-loaded",
+        settings: settings || null
+      });
+    } catch (e) {
+      figma.ui.postMessage({
+        type: "settings-loaded",
+        settings: null
+      });
+    }
+  }
+  figma.ui.onmessage = async (msg) => {
     if (msg.type === "get-selection") {
       const textNodes = findTextNodes(figma.currentPage.selection);
       figma.ui.postMessage({
@@ -42,6 +57,17 @@
         nodes: textNodes,
         count: textNodes.length
       });
+    }
+    if (msg.type === "save-settings") {
+      try {
+        await figma.clientStorage.setAsync(SETTINGS_KEY, msg.settings);
+        figma.ui.postMessage({ type: "settings-saved", success: true });
+      } catch (e) {
+        figma.ui.postMessage({ type: "settings-saved", success: false });
+      }
+    }
+    if (msg.type === "load-settings") {
+      await loadAndSendSettings();
     }
     if (msg.type === "notify") {
       figma.notify(msg.message);
@@ -64,4 +90,5 @@
     nodes: initialNodes,
     count: initialNodes.length
   });
+  loadAndSendSettings();
 })();
