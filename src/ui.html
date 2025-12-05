@@ -516,7 +516,7 @@
 
             if (res.ok) {
               const data = await res.json();
-              const content = atob(data.content);
+              const content = decodeBase64UTF8(data.content);
               const translations = parseYaml(content);
               addDebug(`Loaded ${Object.keys(translations).length} keys from ${lang}`);
 
@@ -780,7 +780,7 @@
 
             if (getRes.ok) {
               const data = await getRes.json();
-              existingContent = atob(data.content);
+              existingContent = decodeBase64UTF8(data.content);
               sha = data.sha;
             }
           } catch (e) {
@@ -804,7 +804,7 @@
               },
               body: JSON.stringify({
                 message: `Update ${lang} translations from Figma (${Object.keys(translations).length} keys)`,
-                content: btoa(unescape(encodeURIComponent(newContent))),
+                content: encodeBase64UTF8(newContent),
                 branch: settings.branch,
                 ...(sha ? { sha } : {})
               })
@@ -845,6 +845,31 @@
       }
     }
 
+    // Decode base64 with proper UTF-8 support
+    function decodeBase64UTF8(base64) {
+      // GitHub returns base64 with newlines, strip them
+      const cleanBase64 = base64.replace(/[\n\r]/g, '');
+      const binaryString = atob(cleanBase64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const decoded = new TextDecoder('utf-8').decode(bytes);
+      addDebug(`Decoded sample: ${decoded.substring(0, 100)}...`);
+      return decoded;
+    }
+
+    // Encode string to base64 with proper UTF-8 support
+    function encodeBase64UTF8(str) {
+      const encoder = new TextEncoder();
+      const bytes = encoder.encode(str);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binary);
+    }
+
     // Simple YAML parser (flat keys only)
     function parseYaml(yaml) {
       const result = {};
@@ -852,17 +877,37 @@
 
       const lines = yaml.split('\n');
       for (const line of lines) {
-        const match = line.match(/^([^:#]+):\s*["']?(.*)["']?\s*$/);
-        if (match) {
-          let key = match[1].trim();
-          let value = match[2].trim();
-          // Remove surrounding quotes
-          if ((value.startsWith('"') && value.endsWith('"')) ||
-              (value.startsWith("'") && value.endsWith("'"))) {
-            value = value.slice(1, -1);
+        // Match key: value, where value may be quoted
+        const colonIdx = line.indexOf(':');
+        if (colonIdx === -1) continue;
+
+        const key = line.substring(0, colonIdx).trim();
+        if (!key) continue;
+
+        let value = line.substring(colonIdx + 1).trim();
+
+        // Handle quoted values (including escaped quotes inside)
+        if (value.startsWith('"')) {
+          // Find the closing quote (not escaped)
+          let endIdx = 1;
+          while (endIdx < value.length) {
+            if (value[endIdx] === '"' && value[endIdx - 1] !== '\\') {
+              break;
+            }
+            endIdx++;
           }
-          result[key] = value;
+          value = value.substring(1, endIdx);
+          // Unescape escaped quotes
+          value = value.replace(/\\"/g, '"');
+        } else if (value.startsWith("'")) {
+          // Single quotes don't support escaping in YAML
+          const endIdx = value.lastIndexOf("'");
+          if (endIdx > 0) {
+            value = value.substring(1, endIdx);
+          }
         }
+
+        result[key] = value;
       }
       return result;
     }
@@ -873,12 +918,12 @@
       const sortedKeys = Object.keys(obj).sort();
       for (const key of sortedKeys) {
         const value = obj[key];
-        // Quote values that need it
-        const needsQuotes = /[:#{}\[\],&*?|<>=!%@`]/.test(value) ||
+        // Quote values that need it (including values with quotes or HTML)
+        const needsQuotes = /[:#{}\[\],&*?|<>=!%@`"'<>]/.test(value) ||
                            value.includes('\n') ||
                            value.startsWith(' ') ||
                            value.endsWith(' ');
-        const quoted = needsQuotes ? `"${value.replace(/"/g, '\\"')}"` : value;
+        const quoted = needsQuotes ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : value;
         lines.push(`${key}: ${quoted}`);
       }
       return lines.join('\n') + '\n';

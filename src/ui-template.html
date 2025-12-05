@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 12px;
+      color: #333;
+      padding: 12px;
+      background: #fff;
+    }
+
+    h2 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #333;
+    }
+
+    .section {
+      margin-bottom: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #e5e5e5;
+    }
+
+    .section:last-child {
+      border-bottom: none;
+    }
+
+    label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 4px;
+      color: #666;
+    }
+
+    input[type="text"], input[type="password"], textarea {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-bottom: 8px;
+      font-family: inherit;
+    }
+
+    input[type="text"]:focus, input[type="password"]:focus, textarea:focus {
+      outline: none;
+      border-color: #18a0fb;
+    }
+
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button.primary {
+      background: #18a0fb;
+      color: white;
+    }
+
+    button.primary:hover {
+      background: #0d8de5;
+    }
+
+    button.primary:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    button.secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+
+    button.secondary:hover {
+      background: #e0e0e0;
+    }
+
+    button.small {
+      padding: 4px 8px;
+      font-size: 11px;
+    }
+
+    .status {
+      padding: 8px 12px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      font-size: 11px;
+    }
+
+    .status.info {
+      background: #e8f4fd;
+      color: #1a73e8;
+    }
+
+    .status.success {
+      background: #e6f4ea;
+      color: #1e8e3e;
+    }
+
+    .status.error {
+      background: #fce8e6;
+      color: #d93025;
+    }
+
+    .text-list {
+      max-height: 350px;
+      overflow-y: auto;
+      border: 1px solid #e5e5e5;
+      border-radius: 4px;
+    }
+
+    .text-item {
+      padding: 12px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .text-item:last-child {
+      border-bottom: none;
+    }
+
+    .text-item:hover {
+      background: #fafafa;
+    }
+
+    .key-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .key-row label {
+      margin: 0;
+      min-width: 30px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .key-row input {
+      flex: 1;
+      margin: 0;
+      font-family: monospace;
+      font-size: 11px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #999;
+    }
+
+    .empty-state svg {
+      margin-bottom: 12px;
+      opacity: 0.5;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .settings-toggle {
+      font-size: 11px;
+      color: #666;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+
+    .settings-toggle:hover {
+      color: #18a0fb;
+    }
+
+    .settings-panel {
+      display: none;
+      background: #f9f9f9;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+    }
+
+    .settings-panel.visible {
+      display: block;
+    }
+
+    .loading {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #fff;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .loading-dark {
+      border-color: #ccc;
+      border-top-color: transparent;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .lang-header {
+      display: grid;
+      grid-template-columns: 40px 1fr;
+      gap: 6px;
+      padding: 8px 12px;
+      background: #f5f5f5;
+      border-bottom: 1px solid #e5e5e5;
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      color: #666;
+    }
+
+    /* Search dropdown styles */
+    .key-input-wrapper {
+      position: relative;
+      flex: 1;
+    }
+
+    .key-input-wrapper input {
+      width: 100%;
+    }
+
+    .search-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid #ddd;
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      display: none;
+    }
+
+    .search-dropdown.visible {
+      display: block;
+    }
+
+    .search-result {
+      padding: 8px 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .search-result:last-child {
+      border-bottom: none;
+    }
+
+    .search-result:hover {
+      background: #f5f9ff;
+    }
+
+    .search-result-key {
+      font-family: monospace;
+      font-size: 11px;
+      color: #18a0fb;
+      margin-bottom: 2px;
+    }
+
+    .search-result-preview {
+      font-size: 11px;
+      color: #666;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .search-result-lang {
+      display: inline-block;
+      background: #eee;
+      padding: 1px 4px;
+      border-radius: 2px;
+      font-size: 9px;
+      margin-right: 4px;
+      text-transform: uppercase;
+    }
+
+    .search-result-match {
+      background: #fff3cd;
+    }
+
+    .fetch-keys-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .keys-status {
+      font-size: 11px;
+      color: #666;
+    }
+
+    .keys-status.loaded {
+      color: #1e8e3e;
+    }
+
+    #debug-panel {
+      display: none;
+      background: #1e1e1e;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 10px;
+      padding: 8px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      max-height: 150px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="section">
+    <div class="settings-toggle" onclick="window.uiToggleSettings()">⚙️ GitHub Settings</div>
+    <div id="settings-panel" class="settings-panel">
+      <label>Personal Access Token</label>
+      <input type="password" id="github-token" placeholder="ghp_xxxxxxxxxxxx" />
+
+      <label>Repository (owner/repo)</label>
+      <input type="text" id="github-repo" placeholder="myorg/translations" />
+
+      <label>Branch</label>
+      <input type="text" id="github-branch" placeholder="main" value="main" />
+
+      <label>Translations folder</label>
+      <input type="text" id="translations-folder" placeholder="src" value="src" />
+
+      <label>Filename</label>
+      <input type="text" id="translations-filename" placeholder="translations.yaml" value="translations.yaml" />
+
+      <label>Locales (comma-separated)</label>
+      <input type="text" id="languages" placeholder="en_US,de_DE,fr_FR" value="en_US,de_DE,fr_FR" />
+
+      <button class="secondary" onclick="window.uiSaveSettings()">Save Settings</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Translations</h2>
+
+    <div class="fetch-keys-row">
+      <button class="secondary small" id="fetch-keys-btn" onclick="window.uiFetchExistingKeys()">
+        Load existing keys
+      </button>
+      <span id="keys-status" class="keys-status">No keys loaded</span>
+    </div>
+
+    <div id="status" class="status info">Select elements in Figma to extract text</div>
+
+    <div id="debug-panel"></div>
+
+    <div id="text-list" class="text-list">
+      <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M4 6h16M4 12h16M4 18h10"/>
+        </svg>
+        <div>No text elements selected</div>
+        <div style="margin-top: 4px; font-size: 11px;">Select frames or text layers in Figma</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="btn-row">
+      <button class="primary" id="push-btn" onclick="window.uiPushToGitHub()" disabled>
+        Push to GitHub
+      </button>
+      <button class="secondary" onclick="window.uiRefreshSelection()">
+        Refresh
+      </button>
+    </div>
+  </div>
+
+  <script>
+    {{UI_SCRIPT}}
+  </script>
+</body>
+</html>
