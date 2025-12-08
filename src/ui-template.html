@@ -190,10 +190,32 @@
       padding: 12px;
       border-radius: 4px;
       margin-bottom: 12px;
+      position: relative;
     }
 
     .settings-panel.visible {
       display: block;
+    }
+
+    .panel-close {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 20px;
+      height: 20px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: #999;
+      font-size: 16px;
+      line-height: 20px;
+      padding: 0;
+      border-radius: 4px;
+    }
+
+    .panel-close:hover {
+      background: #eee;
+      color: #333;
     }
 
     .loading {
@@ -317,6 +339,18 @@
       color: #1e8e3e;
     }
 
+    .debug-toggle {
+      font-size: 10px;
+      color: #999;
+      cursor: pointer;
+      text-align: center;
+      padding: 4px;
+    }
+
+    .debug-toggle:hover {
+      color: #666;
+    }
+
     #debug-panel {
       display: none;
       background: #1e1e1e;
@@ -324,11 +358,29 @@
       font-family: monospace;
       font-size: 10px;
       padding: 8px;
+      padding-top: 24px;
       border-radius: 4px;
-      margin-bottom: 12px;
+      margin-top: 8px;
       max-height: 150px;
       overflow-y: auto;
       white-space: pre-wrap;
+      position: relative;
+    }
+
+    #debug-panel.visible {
+      display: block;
+    }
+
+    #debug-panel .panel-close {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      color: #666;
+    }
+
+    #debug-panel .panel-close:hover {
+      background: #333;
+      color: #0f0;
     }
   </style>
 </head>
@@ -336,6 +388,7 @@
   <div class="section">
     <div class="settings-toggle" onclick="window.uiToggleSettings()">⚙️ GitHub Settings</div>
     <div id="settings-panel" class="settings-panel">
+      <button class="panel-close" onclick="window.uiToggleSettings()">×</button>
       <label>Personal Access Token</label>
       <input type="password" id="github-token" placeholder="ghp_xxxxxxxxxxxx" />
 
@@ -370,8 +423,6 @@
 
     <div id="status" class="status info">Select elements in Figma to extract text</div>
 
-    <div id="debug-panel"></div>
-
     <div id="text-list" class="text-list">
       <div class="empty-state">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -392,6 +443,13 @@
         Refresh
       </button>
     </div>
+  </div>
+
+  <div id="debug-section">
+    <div class="debug-toggle" onclick="window.uiToggleDebug()">
+      <span id="debug-toggle-text">Show debug log</span>
+    </div>
+    <div id="debug-panel"></div>
   </div>
 
   <script>

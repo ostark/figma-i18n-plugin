@@ -72,6 +72,18 @@
     if (msg.type === "notify") {
       figma.notify(msg.message);
     }
+    if (msg.type === "rename-layer") {
+      const nodeId = msg.nodeId;
+      const newName = msg.newName;
+      const node = figma.getNodeById(nodeId);
+      if (node && "name" in node) {
+        node.name = newName;
+        figma.ui.postMessage({ type: "layer-renamed", success: true, nodeId, newName });
+        figma.notify(`Layer renamed to "${newName}"`);
+      } else {
+        figma.ui.postMessage({ type: "layer-renamed", success: false, nodeId });
+      }
+    }
     if (msg.type === "close") {
       figma.closePlugin();
     }

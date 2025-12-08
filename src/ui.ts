@@ -45,21 +45,76 @@ function setStatus(message: string, type = 'info') {
   }
 }
 
+let debugMessages: string[] = [];
+
 function addDebug(message: string) {
+  debugMessages.push(message);
+  updateDebugPanel();
+}
+
+function updateDebugPanel() {
+  const panel = $('debug-panel');
+  if (!panel) return;
+
+  // Add close button if not present
+  if (!panel.querySelector('.panel-close')) {
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'panel-close';
+    closeBtn.textContent = '×';
+    closeBtn.onclick = () => {
+      panel.classList.remove('visible');
+      updateDebugToggleText();
+    };
+    panel.appendChild(closeBtn);
+  }
+
+  // Add/update content
+  let content = panel.querySelector('.debug-content') as HTMLElement;
+  if (!content) {
+    content = document.createElement('div');
+    content.className = 'debug-content';
+    panel.appendChild(content);
+  }
+  content.textContent = debugMessages.join('\n');
+  panel.scrollTop = panel.scrollHeight;
+
+  // Update toggle text to show there's content
+  updateDebugToggleText();
+}
+
+function updateDebugToggleText() {
+  const toggleText = $('debug-toggle-text');
+  const panel = $('debug-panel');
+  if (!toggleText || !panel) return;
+
+  const isVisible = panel.classList.contains('visible');
+  const count = debugMessages.length;
+
+  if (isVisible) {
+    toggleText.textContent = 'Hide debug log';
+  } else if (count > 0) {
+    toggleText.textContent = `Show debug log (${count} messages)`;
+  } else {
+    toggleText.textContent = 'Show debug log';
+  }
+}
+
+function toggleDebug() {
   const panel = $('debug-panel');
   if (panel) {
-    panel.style.display = 'block';
-    panel.textContent += message + '\n';
-    panel.scrollTop = panel.scrollHeight;
+    panel.classList.toggle('visible');
+    updateDebugToggleText();
   }
 }
 
 function clearDebug() {
+  debugMessages = [];
   const panel = $('debug-panel');
   if (panel) {
-    panel.textContent = '';
-    panel.style.display = 'none';
+    panel.innerHTML = '';
+    panel.classList.remove('visible');
   }
+  updateDebugToggleText();
 }
 
 // Apply settings to UI
@@ -375,8 +430,8 @@ function renderTextList() {
 
   const html = textNodes.map((node, i) => `
     <div class="text-item" data-id="${node.id}">
-      <div class="key-row">
-        <label>Key</label>
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+        <label style="font-size: 10px; color: #666; min-width: 45px; font-weight: 600;">Key</label>
         <div class="key-input-wrapper">
           <input type="text"
                  id="key-${i}"
@@ -387,19 +442,19 @@ function renderTextList() {
                  autocomplete="off" />
           <div id="dropdown-${i}" class="search-dropdown"></div>
         </div>
+        <button class="secondary small" onclick="window.uiApplyKeyToLayer(${i}, '${node.id}')" title="Rename layer to key">Apply</button>
       </div>
-      <div style="display: grid; grid-template-columns: repeat(${languages.length}, 1fr); gap: 6px;">
-        ${languages.map(lang => `
-          <div>
-            <label style="font-size: 10px; color: #999; margin-bottom: 2px; display: block;">${lang.toUpperCase()}</label>
-            <textarea
-              id="trans-${i}-${lang}"
-              rows="2"
-              placeholder="${lang === languages[0] ? escapeHtml(node.text) : 'Translation...'}"
-            >${lang === languages[0] ? escapeHtml(node.text) : ''}</textarea>
-          </div>
-        `).join('')}
-      </div>
+      ${languages.map(lang => `
+        <div style="display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px;">
+          <label style="font-size: 10px; color: #999; min-width: 45px; padding-top: 6px;">${lang}</label>
+          <textarea
+            id="trans-${i}-${lang}"
+            rows="4"
+            style="flex: 1;"
+            placeholder="${lang === languages[0] ? escapeHtml(node.text) : 'Translation...'}"
+          >${lang === languages[0] ? escapeHtml(node.text) : ''}</textarea>
+        </div>
+      `).join('')}
     </div>
   `).join('');
 
@@ -412,6 +467,25 @@ function refreshSelection() {
   parent.postMessage({ pluginMessage: { type: 'get-selection' } }, '*');
 }
 
+function applyKeyToLayer(nodeIndex: number, nodeId: string) {
+  const keyInput = $(`key-${nodeIndex}`) as HTMLInputElement;
+  if (!keyInput) return;
+
+  const key = keyInput.value.trim();
+  if (!key) {
+    setStatus('Please enter a key first', 'error');
+    return;
+  }
+
+  parent.postMessage({
+    pluginMessage: {
+      type: 'rename-layer',
+      nodeId: nodeId,
+      newName: key
+    }
+  }, '*');
+}
+
 async function pushToGitHub() {
   if (!settings.token || !settings.repo) {
     setStatus('Please configure GitHub settings first', 'error');
@@ -419,7 +493,9 @@ async function pushToGitHub() {
     return;
   }
 
+  // Collect all unique keys and translations per language
   const translationsByLang: Record<string, Record<string, string>> = {};
+  const allKeys: Set<string> = new Set();
   languages.forEach(lang => {
     translationsByLang[lang] = {};
   });
@@ -429,6 +505,7 @@ async function pushToGitHub() {
     const key = keyInput ? keyInput.value.trim() : node.suggestedKey;
 
     if (key) {
+      allKeys.add(key);
       languages.forEach(lang => {
         const textarea = $(`trans-${i}-${lang}`) as HTMLTextAreaElement;
         const value = textarea ? textarea.value.trim() : '';
@@ -439,8 +516,8 @@ async function pushToGitHub() {
     }
   });
 
-  const totalKeys = Object.values(translationsByLang).reduce((sum, obj) => sum + Object.keys(obj).length, 0);
-  if (totalKeys === 0) {
+  const keysArray = Array.from(allKeys);
+  if (keysArray.length === 0) {
     setStatus('No translations to push', 'error');
     return;
   }
@@ -457,16 +534,54 @@ async function pushToGitHub() {
     const folder = settings.translationsFolder;
     const filename = settings.translationsFilename || 'translations.yaml';
 
+    // Build commit message with key names
+    const keysList = keysArray.length <= 3
+      ? keysArray.join(', ')
+      : `${keysArray.slice(0, 3).join(', ')} (+${keysArray.length - 3} more)`;
+    const commitMessage = `Update translations: ${keysList}`;
+
+    setStatus('Fetching current files...', 'info');
+
+    // Step 1: Get current branch ref
+    const refRes = await fetch(
+      `${apiBase}/repos/${owner}/${repo}/git/ref/heads/${settings.branch}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${settings.token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      }
+    );
+    if (!refRes.ok) throw new Error('Failed to get branch ref');
+    const refData = await refRes.json();
+    const currentCommitSha = refData.object.sha;
+
+    // Step 2: Get current commit to find tree
+    const commitRes = await fetch(
+      `${apiBase}/repos/${owner}/${repo}/git/commits/${currentCommitSha}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${settings.token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      }
+    );
+    if (!commitRes.ok) throw new Error('Failed to get commit');
+    const commitData = await commitRes.json();
+    const baseTreeSha = commitData.tree.sha;
+
+    // Step 3: Create blobs for each updated file
+    const treeItems: Array<{path: string; mode: string; type: string; sha: string}> = [];
+
     for (const lang of languages) {
       const translations = translationsByLang[lang];
       if (Object.keys(translations).length === 0) continue;
 
       const filePath = `${folder}/${lang}/${filename}`;
-      setStatus(`Pushing ${lang}/${filename}...`, 'info');
+      setStatus(`Processing ${lang}...`, 'info');
 
+      // Fetch existing content
       let existingContent = '';
-      let sha: string | null = null;
-
       try {
         const getRes = await fetch(
           `${apiBase}/repos/${owner}/${repo}/contents/${filePath}?ref=${settings.branch}`,
@@ -477,11 +592,9 @@ async function pushToGitHub() {
             }
           }
         );
-
         if (getRes.ok) {
           const data = await getRes.json();
           existingContent = decodeBase64UTF8(data.content);
-          sha = data.sha;
         }
       } catch (e) {
         // File doesn't exist yet
@@ -491,28 +604,97 @@ async function pushToGitHub() {
       const merged = { ...existingTranslations, ...translations };
       const newContent = toYaml(merged);
 
-      const putRes = await fetch(
-        `${apiBase}/repos/${owner}/${repo}/contents/${filePath}`,
+      // Create blob
+      const blobRes = await fetch(
+        `${apiBase}/repos/${owner}/${repo}/git/blobs`,
         {
-          method: 'PUT',
+          method: 'POST',
           headers: {
             'Authorization': `Bearer ${settings.token}`,
             'Accept': 'application/vnd.github.v3+json',
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            message: `Update ${lang} translations from Figma (${Object.keys(translations).length} keys)`,
-            content: encodeBase64UTF8(newContent),
-            branch: settings.branch,
-            ...(sha ? { sha } : {})
+            content: newContent,
+            encoding: 'utf-8'
           })
         }
       );
+      if (!blobRes.ok) throw new Error(`Failed to create blob for ${lang}`);
+      const blobData = await blobRes.json();
 
-      if (!putRes.ok) {
-        const err = await putRes.json();
-        throw new Error(`${lang}: ${err.message || 'Failed to push'}`);
+      treeItems.push({
+        path: filePath,
+        mode: '100644',
+        type: 'blob',
+        sha: blobData.sha
+      });
+    }
+
+    if (treeItems.length === 0) {
+      setStatus('No changes to push', 'info');
+      return;
+    }
+
+    setStatus('Creating commit...', 'info');
+
+    // Step 4: Create new tree
+    const treeRes = await fetch(
+      `${apiBase}/repos/${owner}/${repo}/git/trees`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${settings.token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          base_tree: baseTreeSha,
+          tree: treeItems
+        })
       }
+    );
+    if (!treeRes.ok) throw new Error('Failed to create tree');
+    const treeData = await treeRes.json();
+
+    // Step 5: Create commit
+    const newCommitRes = await fetch(
+      `${apiBase}/repos/${owner}/${repo}/git/commits`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${settings.token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: commitMessage,
+          tree: treeData.sha,
+          parents: [currentCommitSha]
+        })
+      }
+    );
+    if (!newCommitRes.ok) throw new Error('Failed to create commit');
+    const newCommitData = await newCommitRes.json();
+
+    // Step 6: Update branch ref
+    const updateRefRes = await fetch(
+      `${apiBase}/repos/${owner}/${repo}/git/refs/heads/${settings.branch}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${settings.token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sha: newCommitData.sha
+        })
+      }
+    );
+    if (!updateRefRes.ok) {
+      const err = await updateRefRes.json();
+      throw new Error(err.message || 'Failed to update branch');
     }
 
     // Update local cache
@@ -586,6 +768,8 @@ declare global {
     uiRefreshSelection: typeof refreshSelection;
     uiSearchKeys: typeof searchKeys;
     uiSelectKey: typeof selectKey;
+    uiApplyKeyToLayer: typeof applyKeyToLayer;
+    uiToggleDebug: typeof toggleDebug;
   }
 }
 
@@ -595,6 +779,8 @@ window.uiFetchExistingKeys = fetchExistingKeys;
 window.uiPushToGitHub = pushToGitHub;
 window.uiRefreshSelection = refreshSelection;
 window.uiSearchKeys = searchKeys;
+window.uiApplyKeyToLayer = applyKeyToLayer;
+window.uiToggleDebug = toggleDebug;
 window.uiSelectKey = selectKey;
 
 // Initialize

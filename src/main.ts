@@ -122,6 +122,19 @@ figma.ui.onmessage = async (msg: PluginMessage) => {
     figma.notify(msg.message as string);
   }
 
+  if (msg.type === "rename-layer") {
+    const nodeId = msg.nodeId as string;
+    const newName = msg.newName as string;
+    const node = figma.getNodeById(nodeId);
+    if (node && "name" in node) {
+      node.name = newName;
+      figma.ui.postMessage({ type: "layer-renamed", success: true, nodeId, newName });
+      figma.notify(`Layer renamed to "${newName}"`);
+    } else {
+      figma.ui.postMessage({ type: "layer-renamed", success: false, nodeId });
+    }
+  }
+
   if (msg.type === "close") {
     figma.closePlugin();
   }
